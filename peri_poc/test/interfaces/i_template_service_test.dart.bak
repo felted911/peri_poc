@@ -1,0 +1,374 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
+import 'package:mockito/annotations.dart';
+import 'package:peri_poc/interfaces/i_template_service.dart';
+import 'package:peri_poc/models/template_models.dart';
+import 'package:peri_poc/core/utils/result.dart';
+
+// Generate mock class
+@GenerateMocks([ITemplateService])
+import 'i_template_service_test.mocks.dart';
+
+void main() {
+  group('ITemplateService', () {
+    late MockITemplateService mockTemplateService;
+
+    setUp(() {
+      mockTemplateService = MockITemplateService();
+    });
+
+    group('initialize', () {
+      test('should return success when initialization succeeds', () async {
+        // Arrange
+        when(mockTemplateService.initialize())
+            .thenAnswer((_) async => Result.success(null));
+
+        // Act
+        final result = await mockTemplateService.initialize();
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        verify(mockTemplateService.initialize()).called(1);
+      });
+
+      test('should return failure when initialization fails', () async {
+        // Arrange
+        const errorMessage = 'Failed to load templates';
+        when(mockTemplateService.initialize())
+            .thenAnswer((_) async => Result.failure(errorMessage));
+
+        // Act
+        final result = await mockTemplateService.initialize();
+
+        // Assert
+        expect(result.isFailure, isTrue);
+        expect(result.error, equals(errorMessage));
+        verify(mockTemplateService.initialize()).called(1);
+      });
+    });
+
+    group('getResponse', () {
+      test('should return success with valid template context', () async {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {'habitName': 'Morning Exercise'},
+        );
+        const expectedResponse = 'Great job completing Morning Exercise!';
+        
+        when(mockTemplateService.getResponse(context))
+            .thenAnswer((_) async => Result.success(expectedResponse));
+
+        // Act
+        final result = await mockTemplateService.getResponse(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.data, equals(expectedResponse));
+        verify(mockTemplateService.getResponse(context)).called(1);
+      });
+
+      test('should return failure when no templates found for response type', () async {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+        );
+        const errorMessage = 'No templates found for response type';
+        
+        when(mockTemplateService.getResponse(context))
+            .thenAnswer((_) async => Result.failure(errorMessage));
+
+        // Act
+        final result = await mockTemplateService.getResponse(context);
+
+        // Assert
+        expect(result.isFailure, isTrue);
+        expect(result.error, equals(errorMessage));
+        verify(mockTemplateService.getResponse(context)).called(1);
+      });
+
+      test('should return failure when context validation fails', () async {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {}, // Missing required variables
+        );
+        const errorMessage = 'Context validation failed';
+        
+        when(mockTemplateService.getResponse(context))
+            .thenAnswer((_) async => Result.failure(errorMessage));
+
+        // Act
+        final result = await mockTemplateService.getResponse(context);
+
+        // Assert
+        expect(result.isFailure, isTrue);
+        expect(result.error, equals(errorMessage));
+        verify(mockTemplateService.getResponse(context)).called(1);
+      });
+    });
+
+    group('getRandomResponse', () {
+      test('should return success with valid response type and variables', () async {
+        // Arrange
+        const responseType = ResponseType.habitCompleted;
+        final variables = {'habitName': 'Daily Reading'};
+        const expectedResponse = 'Awesome! You completed Daily Reading today.';
+        
+        when(mockTemplateService.getRandomResponse(responseType, variables: variables))
+            .thenAnswer((_) async => Result.success(expectedResponse));
+
+        // Act
+        final result = await mockTemplateService.getRandomResponse(
+          responseType,
+          variables: variables,
+        );
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.data, equals(expectedResponse));
+        verify(mockTemplateService.getRandomResponse(responseType, variables: variables)).called(1);
+      });
+
+      test('should return success with just response type', () async {
+        // Arrange
+        const responseType = ResponseType.greeting;
+        const expectedResponse = 'Hello! Ready to work on your habits today?';
+        
+        when(mockTemplateService.getRandomResponse(responseType))
+            .thenAnswer((_) async => Result.success(expectedResponse));
+
+        // Act
+        final result = await mockTemplateService.getRandomResponse(responseType);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.data, equals(expectedResponse));
+        verify(mockTemplateService.getRandomResponse(responseType)).called(1);
+      });
+
+      test('should return failure when no templates available', () async {
+        // Arrange
+        const responseType = ResponseType.habitCompleted;
+        const errorMessage = 'No templates available for this response type';
+        
+        when(mockTemplateService.getRandomResponse(responseType))
+            .thenAnswer((_) async => Result.failure(errorMessage));
+
+        // Act
+        final result = await mockTemplateService.getRandomResponse(responseType);
+
+        // Assert
+        expect(result.isFailure, isTrue);
+        expect(result.error, equals(errorMessage));
+        verify(mockTemplateService.getRandomResponse(responseType)).called(1);
+      });
+    });
+
+    group('hasTemplatesFor', () {
+      test('should return true when templates exist for response type', () {
+        // Arrange
+        const responseType = ResponseType.habitCompleted;
+        when(mockTemplateService.hasTemplatesFor(responseType))
+            .thenReturn(true);
+
+        // Act
+        final result = mockTemplateService.hasTemplatesFor(responseType);
+
+        // Assert
+        expect(result, isTrue);
+        verify(mockTemplateService.hasTemplatesFor(responseType)).called(1);
+      });
+
+      test('should return false when no templates exist for response type', () {
+        // Arrange
+        const responseType = ResponseType.habitCompleted;
+        when(mockTemplateService.hasTemplatesFor(responseType))
+            .thenReturn(false);
+
+        // Act
+        final result = mockTemplateService.hasTemplatesFor(responseType);
+
+        // Assert
+        expect(result, isFalse);
+        verify(mockTemplateService.hasTemplatesFor(responseType)).called(1);
+      });
+    });
+
+    group('getAvailableResponseTypes', () {
+      test('should return list of available response types', () {
+        // Arrange
+        final expectedTypes = [
+          ResponseType.habitCompleted,
+          ResponseType.greeting,
+          ResponseType.goodbye,
+        ];
+        when(mockTemplateService.getAvailableResponseTypes())
+            .thenReturn(expectedTypes);
+
+        // Act
+        final result = mockTemplateService.getAvailableResponseTypes();
+
+        // Assert
+        expect(result, equals(expectedTypes));
+        expect(result.length, equals(3));
+        verify(mockTemplateService.getAvailableResponseTypes()).called(1);
+      });
+
+      test('should return empty list when no templates available', () {
+        // Arrange
+        when(mockTemplateService.getAvailableResponseTypes())
+            .thenReturn([]);
+
+        // Act
+        final result = mockTemplateService.getAvailableResponseTypes();
+
+        // Assert
+        expect(result, isEmpty);
+        verify(mockTemplateService.getAvailableResponseTypes()).called(1);
+      });
+    });
+
+    group('validateContext', () {
+      test('should return success when context is valid', () {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {'habitName': 'Morning Meditation'},
+        );
+        when(mockTemplateService.validateContext(context))
+            .thenReturn(Result.success(null));
+
+        // Act
+        final result = mockTemplateService.validateContext(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        verify(mockTemplateService.validateContext(context)).called(1);
+      });
+
+      test('should return failure when context is invalid', () {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {}, // Missing required variables
+        );
+        const errorMessage = 'Missing required variables';
+        when(mockTemplateService.validateContext(context))
+            .thenReturn(Result.failure(errorMessage));
+
+        // Act
+        final result = mockTemplateService.validateContext(context);
+
+        // Assert
+        expect(result.isFailure, isTrue);
+        expect(result.error, equals(errorMessage));
+        verify(mockTemplateService.validateContext(context)).called(1);
+      });
+
+      test('should return failure when response type not supported', () {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+        );
+        const errorMessage = 'Response type not supported';
+        when(mockTemplateService.validateContext(context))
+            .thenReturn(Result.failure(errorMessage));
+
+        // Act
+        final result = mockTemplateService.validateContext(context);
+
+        // Assert
+        expect(result.isFailure, isTrue);
+        expect(result.error, equals(errorMessage));
+        verify(mockTemplateService.validateContext(context)).called(1);
+      });
+    });
+
+    group('getTemplateMetadata', () {
+      test('should return template metadata information', () {
+        // Arrange
+        final expectedMetadata = {
+          'totalTemplates': 42,
+          'responseTypes': ['habitCompleted', 'greeting'],
+          'initialized': true,
+        };
+        when(mockTemplateService.getTemplateMetadata())
+            .thenReturn(expectedMetadata);
+
+        // Act
+        final result = mockTemplateService.getTemplateMetadata();
+
+        // Assert
+        expect(result, equals(expectedMetadata));
+        expect(result['totalTemplates'], equals(42));
+        expect(result['initialized'], isTrue);
+        verify(mockTemplateService.getTemplateMetadata()).called(1);
+      });
+
+      test('should return metadata indicating not initialized', () {
+        // Arrange
+        final expectedMetadata = {
+          'initialized': false,
+        };
+        when(mockTemplateService.getTemplateMetadata())
+            .thenReturn(expectedMetadata);
+
+        // Act
+        final result = mockTemplateService.getTemplateMetadata();
+
+        // Assert
+        expect(result, equals(expectedMetadata));
+        expect(result['initialized'], isFalse);
+        verify(mockTemplateService.getTemplateMetadata()).called(1);
+      });
+    });
+
+    group('interface contract', () {
+      test('should handle multiple sequential calls correctly', () async {
+        // Arrange
+        when(mockTemplateService.initialize())
+            .thenAnswer((_) async => Result.success(null));
+        when(mockTemplateService.hasTemplatesFor(any))
+            .thenReturn(true);
+        when(mockTemplateService.getAvailableResponseTypes())
+            .thenReturn([ResponseType.greeting]);
+
+        // Act
+        await mockTemplateService.initialize();
+        final hasTemplates = mockTemplateService.hasTemplatesFor(ResponseType.greeting);
+        final availableTypes = mockTemplateService.getAvailableResponseTypes();
+
+        // Assert
+        expect(hasTemplates, isTrue);
+        expect(availableTypes, contains(ResponseType.greeting));
+        verify(mockTemplateService.initialize()).called(1);
+        verify(mockTemplateService.hasTemplatesFor(ResponseType.greeting)).called(1);
+        verify(mockTemplateService.getAvailableResponseTypes()).called(1);
+      });
+
+      test('should maintain state consistency across method calls', () async {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {'habitName': 'Exercise'},
+        );
+        
+        when(mockTemplateService.validateContext(context))
+            .thenReturn(Result.success(null));
+        when(mockTemplateService.getResponse(context))
+            .thenAnswer((_) async => Result.success('Response generated'));
+
+        // Act
+        final validationResult = mockTemplateService.validateContext(context);
+        final responseResult = await mockTemplateService.getResponse(context);
+
+        // Assert
+        expect(validationResult.isSuccess, isTrue);
+        expect(responseResult.isSuccess, isTrue);
+        verify(mockTemplateService.validateContext(context)).called(1);
+        verify(mockTemplateService.getResponse(context)).called(1);
+      });
+    });
+  });
+}

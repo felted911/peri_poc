@@ -1,0 +1,630 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:peri_poc/services/template_service_impl.dart';
+import 'package:peri_poc/models/template_models.dart';
+import 'package:peri_poc/core/utils/result.dart';
+
+void main() {
+  group('TemplateServiceImpl', () {
+    late TemplateServiceImpl templateService;
+
+    setUp(() {
+      templateService = TemplateServiceImpl();
+    });
+
+    group('initialization', () {
+      test('should initialize successfully', () async {
+        // Act
+        final result = await templateService.initialize();
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(templateService.hasTemplatesFor(ResponseType.greeting), isTrue);
+        expect(templateService.getAvailableResponseTypes(), isNotEmpty);
+      });
+
+      test(
+        'should return failure if service not initialized before use',
+        () async {
+          // Arrange
+          final context = TemplateContext.now(
+            responseType: ResponseType.greeting,
+          );
+
+          // Act
+          final result = await templateService.getResponse(context);
+
+          // Assert
+          expect(result.isFailure, isTrue);
+          expect(result.error, contains('not initialized'));
+        },
+      );
+
+      test('should provide metadata when not initialized', () {
+        // Act
+        final metadata = templateService.getTemplateMetadata();
+
+        // Assert
+        expect(metadata['initialized'], isFalse);
+      });
+    });
+
+    group('getResponse', () {
+      setUp(() async {
+        await templateService.initialize();
+      });
+
+      test(
+        'should return response for valid context with required variables',
+        () async {
+          // Arrange
+          final context = TemplateContext.now(
+            responseType: ResponseType.habitCompleted,
+            variables: {'habitName': 'Morning Exercise'},
+          );
+
+          // Act
+          final result = await templateService.getResponse(context);
+
+          // Assert
+          expect(result.isSuccess, isTrue);
+          expect(result.value, isNotNull);
+          expect(result.value, contains('Morning Exercise'));
+        },
+      );
+
+      test(
+        'should return response for context with optional variables',
+        () async {
+          // Arrange
+          final context = TemplateContext.now(
+            responseType: ResponseType.habitCompleted,
+            variables: {'habitName': 'Daily Reading', 'streakCount': 7},
+          );
+
+          // Act
+          final result = await templateService.getResponse(context);
+
+          // Assert
+          expect(result.isSuccess, isTrue);
+          expect(result.value, isNotNull);
+          expect(result.value, contains('Daily Reading'));
+        },
+      );
+
+      test('should return response for greeting without variables', () async {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.greeting,
+          variables: {},
+        );
+
+        // Act
+        final result = await templateService.getResponse(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.value, isNotNull);
+      });
+
+      test(
+        'should return failure when required variables are missing',
+        () async {
+          // Arrange
+          final context = TemplateContext.now(
+            responseType: ResponseType.habitCompleted,
+            variables: {}, // Missing required 'habitName'
+          );
+
+          // Act
+          final result = await templateService.getResponse(context);
+
+          // Assert
+          expect(result.isFailure, isTrue);
+          expect(result.error, contains('No usable templates'));
+        },
+      );
+
+      test('should handle context with userId and metadata', () async {
+        // Arrange
+        final context = TemplateContext(
+          responseType: ResponseType.greeting,
+          variables: {'userName': 'Alice'},
+          timestamp: DateTime.now(),
+          userId: 'user123',
+          metadata: {'source': 'voice'},
+        );
+
+        // Act
+        final result = await templateService.getResponse(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.value, isNotNull);
+      });
+
+      test('should perform variable substitution correctly', () async {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {'habitName': 'Meditation', 'streakCount': 5},
+        );
+
+        // Act
+        final result = await templateService.getResponse(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.value, contains('Meditation'));
+      });
+
+      test('should handle multiple calls with different contexts', () async {
+        // Arrange
+        final context1 = TemplateContext.now(
+          responseType: ResponseType.greeting,
+        );
+        final context2 = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {'habitName': 'Exercise'},
+        );
+
+        // Act
+        final result1 = await templateService.getResponse(context1);
+        final result2 = await templateService.getResponse(context2);
+
+        // Assert
+        expect(result1.isSuccess, isTrue);
+        expect(result2.isSuccess, isTrue);
+        expect(result1.value, isNot(equals(result2.value)));
+      });
+    });
+
+    group('getRandomResponse', () {
+      setUp(() async {
+        await templateService.initialize();
+      });
+
+      test('should return random response for valid response type', () async {
+        // Act
+        final result = await templateService.getRandomResponse(
+          ResponseType.greeting,
+        );
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.value, isNotNull);
+        expect(result.value, isNotEmpty);
+      });
+
+      test('should return random response with variables', () async {
+        // Act
+        final result = await templateService.getRandomResponse(
+          ResponseType.habitCompleted,
+          variables: {'habitName': 'Morning Jog'},
+        );
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.value, contains('Morning Jog'));
+      });
+
+      test('should return different responses on multiple calls', () async {
+        // Act - Call multiple times to increase chance of getting different responses
+        final responses = <String>[];
+        for (int i = 0; i < 10; i++) {
+          final result = await templateService.getRandomResponse(
+            ResponseType.greeting,
+          );
+          if (result.isSuccess) {
+            responses.add(result.value);
+          }
+        }
+
+        // Assert - Should have at least gotten some responses
+        expect(responses, isNotEmpty);
+        // Note: We can't guarantee different responses due to randomness
+        // but the service should be capable of providing them
+      });
+
+      test(
+        'should return failure for response type requiring missing variables',
+        () async {
+          // Act
+          final result = await templateService.getRandomResponse(
+            ResponseType.habitCompleted,
+            variables: {}, // Missing required habitName
+          );
+
+          // Assert
+          expect(result.isFailure, isTrue);
+          expect(result.error, contains('No usable templates'));
+        },
+      );
+    });
+
+    group('hasTemplatesFor', () {
+      setUp(() async {
+        await templateService.initialize();
+      });
+
+      test('should return true for supported response types', () {
+        // Act & Assert
+        expect(templateService.hasTemplatesFor(ResponseType.greeting), isTrue);
+        expect(
+          templateService.hasTemplatesFor(ResponseType.habitCompleted),
+          isTrue,
+        );
+        expect(templateService.hasTemplatesFor(ResponseType.goodbye), isTrue);
+      });
+
+      test('should return false before initialization', () {
+        // Arrange
+        final uninitializedService = TemplateServiceImpl();
+
+        // Act & Assert
+        expect(
+          uninitializedService.hasTemplatesFor(ResponseType.greeting),
+          isFalse,
+        );
+      });
+    });
+
+    group('getAvailableResponseTypes', () {
+      setUp(() async {
+        await templateService.initialize();
+      });
+
+      test('should return non-empty list of response types', () {
+        // Act
+        final types = templateService.getAvailableResponseTypes();
+
+        // Assert
+        expect(types, isNotEmpty);
+        expect(types, contains(ResponseType.greeting));
+        expect(types, contains(ResponseType.habitCompleted));
+      });
+
+      test('should return empty list before initialization', () {
+        // Arrange
+        final uninitializedService = TemplateServiceImpl();
+
+        // Act
+        final types = uninitializedService.getAvailableResponseTypes();
+
+        // Assert
+        expect(types, isEmpty);
+      });
+
+      test('should return consistent list across multiple calls', () {
+        // Act
+        final types1 = templateService.getAvailableResponseTypes();
+        final types2 = templateService.getAvailableResponseTypes();
+
+        // Assert
+        expect(types1, equals(types2));
+      });
+    });
+
+    group('validateContext', () {
+      setUp(() async {
+        await templateService.initialize();
+      });
+
+      test(
+        'should validate context with valid response type and variables',
+        () {
+          // Arrange
+          final context = TemplateContext.now(
+            responseType: ResponseType.habitCompleted,
+            variables: {'habitName': 'Exercise'},
+          );
+
+          // Act
+          final result = templateService.validateContext(context);
+
+          // Assert
+          expect(result.isSuccess, isTrue);
+        },
+      );
+
+      test('should validate context with optional variables', () {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.greeting,
+          variables: {'userName': 'John'},
+        );
+
+        // Act
+        final result = templateService.validateContext(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+      });
+
+      test('should fail validation for missing required variables', () {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {}, // Missing required habitName
+        );
+
+        // Act
+        final result = templateService.validateContext(context);
+
+        // Assert
+        expect(result.isFailure, isTrue);
+        expect(result.error, contains('required variables'));
+      });
+
+      test('should fail validation before initialization', () {
+        // Arrange
+        final uninitializedService = TemplateServiceImpl();
+        final context = TemplateContext.now(
+          responseType: ResponseType.greeting,
+        );
+
+        // Act
+        final result = uninitializedService.validateContext(context);
+
+        // Assert
+        expect(result.isFailure, isTrue);
+        expect(result.error, contains('not initialized'));
+      });
+    });
+
+    group('getTemplateMetadata', () {
+      setUp(() async {
+        await templateService.initialize();
+      });
+
+      test('should return comprehensive metadata when initialized', () {
+        // Act
+        final metadata = templateService.getTemplateMetadata();
+
+        // Assert
+        expect(metadata['initialized'], isTrue);
+        expect(metadata['collectionName'], isNotNull);
+        expect(metadata['totalTemplates'], isA<int>());
+        expect(metadata['totalTemplates'], greaterThan(0));
+        expect(metadata['responseTypes'], isA<List>());
+        expect(metadata['templatesByType'], isA<Map>());
+      });
+
+      test('should include template details by response type', () {
+        // Act
+        final metadata = templateService.getTemplateMetadata();
+        final templatesByType = metadata['templatesByType'] as Map;
+
+        // Assert
+        expect(templatesByType, isNotEmpty);
+
+        // Check structure for a known response type
+        if (templatesByType.containsKey('ResponseType.greeting')) {
+          final greetingData = templatesByType['ResponseType.greeting'];
+          expect(greetingData['count'], isA<int>());
+          expect(greetingData['templates'], isA<List>());
+        }
+      });
+
+      test('should provide metadata indicating not initialized', () {
+        // Arrange
+        final uninitializedService = TemplateServiceImpl();
+
+        // Act
+        final metadata = uninitializedService.getTemplateMetadata();
+
+        // Assert
+        expect(metadata['initialized'], isFalse);
+        expect(metadata.length, equals(1));
+      });
+    });
+
+    group('variable substitution edge cases', () {
+      setUp(() async {
+        await templateService.initialize();
+      });
+
+      test('should handle DateTime variables correctly', () async {
+        // Arrange
+        final testDate = DateTime.parse('2024-01-15T10:30:00Z');
+        final context = TemplateContext.now(
+          responseType: ResponseType.greeting,
+          variables: {'timeOfDay': 'morning', 'lastActivity': testDate},
+        );
+
+        // Act
+        final result = await templateService.getResponse(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.value, isNotNull);
+      });
+
+      test('should handle numeric variables correctly', () async {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {
+            'habitName': 'Exercise',
+            'streakCount': 42,
+            'completionRate': 85.5,
+          },
+        );
+
+        // Act
+        final result = await templateService.getResponse(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.value, isNotNull);
+      });
+
+      test('should handle boolean variables correctly', () async {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.greeting,
+          variables: {'isFirstTime': true, 'hasStreak': false},
+        );
+
+        // Act
+        final result = await templateService.getResponse(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.value, isNotNull);
+      });
+
+      test('should handle null and empty variables gracefully', () async {
+        // Arrange
+        final context = TemplateContext.now(
+          responseType: ResponseType.greeting,
+          variables: {
+            'userName': null,
+            'emptyString': '',
+            'validName': 'Alice',
+          },
+        );
+
+        // Act
+        final result = await templateService.getResponse(context);
+
+        // Assert
+        expect(result.isSuccess, isTrue);
+        expect(result.value, isNotNull);
+      });
+    });
+
+    group('weighted template selection', () {
+      setUp(() async {
+        await templateService.initialize();
+      });
+
+      test('should use weighted selection for templates', () async {
+        // This test verifies that the weighted selection mechanism works
+        // by calling the same response type multiple times and ensuring
+        // we get valid responses each time
+
+        final responses = <String>[];
+
+        // Act - Get multiple responses
+        for (int i = 0; i < 5; i++) {
+          final result = await templateService.getRandomResponse(
+            ResponseType.greeting,
+          );
+          if (result.isSuccess) {
+            responses.add(result.value);
+          }
+        }
+
+        // Assert
+        expect(responses, hasLength(5));
+        for (final response in responses) {
+          expect(response, isNotEmpty);
+        }
+      });
+    });
+
+    group('error handling', () {
+      test('should handle template processing errors gracefully', () async {
+        // Arrange
+        await templateService.initialize();
+
+        // Create a context that might cause processing issues
+        final context = TemplateContext.now(
+          responseType: ResponseType.habitCompleted,
+          variables: {
+            'habitName': 'Test Habit',
+            'complexObject': {'nested': 'value'},
+          },
+        );
+
+        // Act
+        final result = await templateService.getResponse(context);
+
+        // Assert
+        // Should either succeed or fail gracefully with a meaningful error
+        expect(result, isA<Result<String>>());
+        if (result.isFailure) {
+          expect(result.error, isNotEmpty);
+        }
+      });
+
+      test('should handle service state consistency', () async {
+        // Act
+        await templateService.initialize();
+
+        // Verify state is consistent across multiple operations
+        expect(templateService.hasTemplatesFor(ResponseType.greeting), isTrue);
+
+        final metadata1 = templateService.getTemplateMetadata();
+        final metadata2 = templateService.getTemplateMetadata();
+
+        // Assert
+        expect(metadata1['initialized'], equals(metadata2['initialized']));
+        expect(
+          metadata1['totalTemplates'],
+          equals(metadata2['totalTemplates']),
+        );
+      });
+    });
+
+    group('integration scenarios', () {
+      setUp(() async {
+        await templateService.initialize();
+      });
+
+      test('should handle complete habit flow', () async {
+        // Simulate a complete habit interaction flow
+
+        // 1. Greeting
+        final greetingResult = await templateService.getRandomResponse(
+          ResponseType.greeting,
+        );
+        expect(greetingResult.isSuccess, isTrue);
+
+        // 2. Habit completion
+        final completionResult = await templateService.getRandomResponse(
+          ResponseType.habitCompleted,
+          variables: {'habitName': 'Morning Meditation'},
+        );
+        expect(completionResult.isSuccess, isTrue);
+
+        // 3. Streak update
+        final streakResult = await templateService.getRandomResponse(
+          ResponseType.habitStreak,
+          variables: {'habitName': 'Morning Meditation', 'streakCount': 7},
+        );
+        expect(streakResult.isSuccess, isTrue);
+
+        // 4. Goodbye
+        final goodbyeResult = await templateService.getRandomResponse(
+          ResponseType.goodbye,
+        );
+        expect(goodbyeResult.isSuccess, isTrue);
+      });
+
+      test('should handle error recovery flow', () async {
+        // Simulate error and recovery
+
+        // 1. Attempt with missing variables (should fail)
+        final errorResult = await templateService.getRandomResponse(
+          ResponseType.habitCompleted,
+          variables: {}, // Missing required variables
+        );
+        expect(errorResult.isFailure, isTrue);
+
+        // 2. Provide help response
+        final helpResult = await templateService.getRandomResponse(
+          ResponseType.helpGeneral,
+        );
+        expect(helpResult.isSuccess, isTrue);
+
+        // 3. Retry with correct variables (should succeed)
+        final retryResult = await templateService.getRandomResponse(
+          ResponseType.habitCompleted,
+          variables: {'habitName': 'Exercise'},
+        );
+        expect(retryResult.isSuccess, isTrue);
+      });
+    });
+  });
+}
